@@ -18,7 +18,7 @@ final class Installation extends Access {
 
 		}
 
-		self::fnNotFound();
+		self::fnNotFound($fn);
 
 	}
 

@@ -2,6 +2,25 @@
  * @description Takes care of every action a photo can handle and execute.
  */
 
+//[TODO] Find a better place for this
+Array.prototype.unique = function() {
+    var a = this.concat();
+    for(var i=0; i<a.length; ++i) {
+        for(var j=i+1; j<a.length; ++j) {
+            if(a[i] === a[j])
+                a.splice(j--, 1);
+        }
+    }
+    return a;
+};
+
+Array.prototype.diff = function(a) {
+    return this.filter(function(i) {return a.indexOf(i) < 0;});
+};
+
+
+
+
 photo = {
 
 	json  : null,
@@ -574,12 +593,39 @@ photo.setTags = function(photoIDs, tags) {
 	tags = tags.replace(/,$|^,|(\ ){0,}$/g, '')
 
 	if (visible.photo()) {
+        //This works in the sidebar AFTER trying to set tags...
 		photo.json.tags = tags
 		view.photo.tags()
 	}
 
+    //If there is more than one photoID, don't overwrite tags, just merge the new ones in.
+    overwrite_flag = (photoIDs.length == 1);
+
 	photoIDs.forEach(function(id, index, array) {
-		album.json.content[id].tags += "," + tags
+        //Overwrite tags for single photoIDs
+        if (overwrite_flag){
+            new_tags = tags.split(",");
+            old_tags = album.json.content[id].tags.split(",");
+        //Find tags in old_tags missing from new_tags
+            missing = old_tags.diff(new_tags);
+
+            for (i = 0; i < missing.length; ++i){
+                m = missing[i];
+                let unset_args = {
+                    photoIDs: id,
+                    tag: m
+                }
+                api.post('Photo::unsetTag', unset_args, function(data) { if (data !== true) lychee.error(null, params, data) });
+            }
+
+            album.json.content[id].tags = tags;
+        } else {
+            //Merge tags for multiple photoIDs
+            new_tags = tags.split(",");
+            old_tags = album.json.content[id].tags.split(",");
+            merge_tags = old_tags.concat(new_tags).unique();
+            album.json.content[id].tags = merge_tags.join(",");
+        }
 	})
 
 	let params = {

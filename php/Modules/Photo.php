@@ -1219,15 +1219,16 @@ final class Photo {
 	 * @return boolean Returns true on success
 	 */
 	private function tagPhoto($photoID, $tagID){
-		$tag_check_q = Database::prepare(Database::get(), "SELECT count(tag_id) as c FROM ? WHERE `tag_id` = '?' AND `photo_id` = '?' LIMIT 1", array(LYCHEE_TABLE_PHOTOTAGS, $photoID, $tagID));
+		$tag_check_q = Database::prepare(Database::get(), "SELECT count(tag_id) as c FROM ? WHERE `tag_id` = '?' AND `photo_id` = '?' LIMIT 1", array(LYCHEE_TABLE_PHOTOTAGS, $tagID, $photoID));
 		$tag_check_r = Database::execute(Database::get(), $tag_check_q, __METHOD__, __LINE__);
-
 		if ($tag_check_r === false) {			
 			return false; //Should not happen.
 		} else {
-			if ($res = $tag_check_r->fetch_object()){				
-				if ($res->c > 0){ return true; } //Tag already exists;				
-				$tag_assoc_q = Database::prepare(Database::get(), "INSERT INTO ? (`tag_id`, `photo_id`) VALUES ('?','?')", array(LYCHEE_TABLE_PHOTOTAGS, $tagID, $photoID));
+			if ($res = $tag_check_r->fetch_assoc()){
+				if ($res["c"] > 0){ return true; } //Tag already exists;
+				$id = generateID();
+
+				$tag_assoc_q = Database::prepare(Database::get(), "INSERT INTO ? (`id`,`tag_id`, `photo_id`) VALUES ('?','?','?')", array(LYCHEE_TABLE_PHOTOTAGS, $id, $tagID, $photoID));
 				$tag_assoc_r = Database::execute(Database::get(), $tag_assoc_q, __METHOD__, __LINE__);
 				return ($tag_assoc_r !== false);
 			}
@@ -1255,6 +1256,31 @@ final class Photo {
 	}
 
 	/**
+	 * Removes a given Photo/Tag relationship from the database
+	 * @return boolean Returns true when successful
+	 */
+		public function unsetTag($tagfull){
+
+		$photoIDs = explode(",",$this->photoIDs);
+
+		//Check if the tag has a namespace
+		$namespace = $tag = "";
+		if (strpos($tagfull, ":") !== false){
+			list($namespace, $tag) = explode(":", $tagfull, 2);
+		} else {
+			$namespace = null;
+			$tag = $tagfull;
+		}
+		$tag_id = $this->getTagID($tag, $namespace);
+
+		foreach ($photoIDs as $photoID ){
+			$tag_retr_q = Database::Prepare(Database::get(), "DELETE FROM " . LYCHEE_TABLE_PHOTOTAGS . " WHERE photo_id = '?' AND tag_id = '?'", array($photoID, $tag_id));
+			$tag_retr_r = Database::execute(Database::get(), $tag_retr_q, __METHOD__, __LINE__);
+		}
+		return true;
+	}
+
+	/**
 	 * Sets the tags of a photo.
 	 * @return boolean Returns true when successful.
 	 */
@@ -1271,8 +1297,6 @@ final class Photo {
 		// Parse tags
 		$tags = preg_replace('/(\ ,\ )|(\ ,)|(,\ )|(,{1,}\ {0,})|(,$|^,)/', ',', $tags);
 		$tags = preg_replace('/,$|^,|(\ ){0,}$/', '', $tags);
-
-		//[TODO] Implement clearTags() to wipe out tags associated with a given photo, or deleteTag($tag)
 
 		//At this point, $tags should be a CSV string
 		$tag_list = explode(",", $tags);
@@ -1302,9 +1326,7 @@ final class Photo {
 		$photo_ids = explode(",",$this->photoIDs);
 
 		foreach ($photo_ids as $photoID){
-			error_log("Tagging $photoID");
 			foreach($unique_ids as $u_id){
-				error_log("With $u_id");
 				if (!$this->tagPhoto($photoID, $u_id)){
 					throw new BadFunctionCallException("Failed to tag photo $photoID with tag $u_id");
 				}
