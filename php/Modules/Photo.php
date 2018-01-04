@@ -710,6 +710,9 @@ final class Photo {
 			return false;
 		}
 
+		//Get Tags (CSV string)
+		$photo["tags"] = $this->getPhotoTags($this->photoIDs);
+
 		// Parse photo
 		$photo['sysdate'] = strftime('%d %b. %Y', substr($photo['id'], 0, -4));
 		if (strlen($photo['takestamp'])>1) $photo['takedate'] = strftime('%d %b. %Y', $photo['takestamp']);
@@ -1321,7 +1324,6 @@ final class Photo {
 		//Associate all returned Tag IDs with all PhotoIDs in $this->photoIDs
 		if (!is_array($unique_ids) || empty($unique_ids)){ return true; } //No tags. Drop out.
 
-
 		//PhotoIDs is also a CSV line
 		$photo_ids = explode(",",$this->photoIDs);
 
@@ -1333,14 +1335,14 @@ final class Photo {
 			}
 		}
 
-		// [DEPRECATED] Set tags
-		$query  = Database::prepare(Database::get(), "UPDATE ? SET tags = '?' WHERE id IN (?)", array(LYCHEE_TABLE_PHOTOS, $tags, $this->photoIDs));
-		$result = Database::execute(Database::get(), $query, __METHOD__, __LINE__);
+		// [DEPRECATED] Set tags in photos table
+		//$query  = Database::prepare(Database::get(), "UPDATE ? SET tags = '?' WHERE id IN (?)", array(LYCHEE_TABLE_PHOTOS, $tags, $this->photoIDs));
+		//$result = Database::execute(Database::get(), $query, __METHOD__, __LINE__);
 
 		// Call plugins
 		Plugins::get()->activate(__METHOD__, 1, func_get_args());
 
-		if ($result===false) return false;
+//		if ($result===false) return false;
 		return true;
 
 	}
