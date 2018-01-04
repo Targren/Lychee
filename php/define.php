@@ -11,15 +11,18 @@ define('LYCHEE_STATUS_LOGGEDIN', 2);
 // Define dirs
 define('LYCHEE_DATA', LYCHEE . 'data/');
 define('LYCHEE_SRC', LYCHEE . 'src/');
+
 define('LYCHEE_UPLOADS', LYCHEE . 'uploads/');
 define('LYCHEE_UPLOADS_BIG', LYCHEE_UPLOADS . 'big/');
 define('LYCHEE_UPLOADS_MEDIUM', LYCHEE_UPLOADS . 'medium/');
 define('LYCHEE_UPLOADS_THUMB', LYCHEE_UPLOADS . 'thumb/');
 define('LYCHEE_UPLOADS_IMPORT', LYCHEE_UPLOADS . 'import/');
+
 define('LYCHEE_PLUGINS', LYCHEE . 'plugins/');
 
 // Define files
 define('LYCHEE_CONFIG_FILE', LYCHEE_DATA . 'config.php');
+
 
 // Define urls
 define('LYCHEE_URL_UPLOADS_BIG', 'uploads/big/');
@@ -42,6 +45,9 @@ function defineTablePrefix($dbTablePrefix) {
 	define('LYCHEE_TABLE_LOG', $dbTablePrefix . 'lychee_log');
 	define('LYCHEE_TABLE_PHOTOS', $dbTablePrefix . 'lychee_photos');
 	define('LYCHEE_TABLE_SETTINGS', $dbTablePrefix . 'lychee_settings');
+	define('LYCHEE_TABLE_TAGS', $dbTablePrefix . 'lychee_tags');
+	define('LYCHEE_TABLE_PHOTOTAGS', $dbTablePrefix . 'lychee_photo_tags');
+
 
 }
 

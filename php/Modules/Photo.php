@@ -46,10 +46,10 @@ final class Photo {
 		// Check permissions
 		if (hasPermissions(LYCHEE_UPLOADS)===false||
 			hasPermissions(LYCHEE_UPLOADS_BIG)===false||
-			hasPermissions(LYCHEE_UPLOADS_THUMB)===false) {
-				Log::error(Database::get(), __METHOD__, __LINE__, 'An upload-folder is missing or not readable and writable');
+			hasPermissions(LYCHEE_UPLOADS_THUMB)===false ) {
+				Log::error(Database::get(), __METHOD__, __LINE__, 'An upload-folder is missing or not readable and writable: ' . LYCHEE_UPLOADS);
 				if ($returnOnError===true) return false;
-				Response::error('An upload-folder is missing or not readable and writable!');
+				Response::error('An upload-folder is missing or not readable and writable! ' .  LYCHEE_UPLOADS);
 		}
 
 		// Call plugins
@@ -646,7 +646,7 @@ final class Photo {
 		// Set unchanged attributes
 		$photo['id']     = $data['id'];
 		$photo['title']  = $data['title'];
-		$photo['tags']   = $data['tags'];
+		//$photo['tags']   = $data['tags'];
 		$photo['public'] = $data['public'];
 		$photo['star']   = $data['star'];
 		$photo['album']  = $data['album'];
@@ -673,6 +673,9 @@ final class Photo {
 			$photo['sysdate']    = strftime('%d %B %Y', substr($data['id'], 0, -4));
 
 		}
+
+		//Set tags entry based on ID
+		$photo['tags'] = Photo::getPhotoTags($photo['id']);
 
 		return $photo;
 
@@ -1164,12 +1167,98 @@ final class Photo {
 
 	}
 
+	//Private tag management functions
+
+	/**
+	 * Creates a new row in the Tags table for the given tag (+ namespace), all lower case
+	 * @return boolean returns true if successful
+	 */
+	private function createTagID($tag, $namespace){
+		$id = generateID();
+		//Doesn't like null values.
+		if (!$namespace){
+			$tag_new_q = Database::prepare(Database::get(), "INSERT INTO ? (`tag_id`, `tag`, `namespace`) VALUES ('?','?',null)",array(LYCHEE_TABLE_TAGS, $id, strtolower($tag)));
+		} else {
+			$tag_new_q = Database::prepare(Database::get(), "INSERT INTO ? (`tag_id`, `tag`, `namespace`) VALUES ('?','?','?')",array(LYCHEE_TABLE_TAGS, $id, strtolower($tag), strtolower($namespace)));
+		}
+		$tag_new_r = Database::execute(Database::get(), $tag_new_q, __METHOD__, __LINE__);
+
+		return ($tag_new_r !== false);
+	}
+
+	/**
+	 * Returns the Tag ID of a given tag (+ namespace)
+	 * @return long Returns the ID when successful
+	 */
+	private function getTagID($tag, $namespace){	
+		//Doesn't like null values.
+		if (!$namespace){
+			$tag_id_q = Database::prepare(Database::get(), "SELECT tag_id FROM ? WHERE tag = '?' AND namespace IS null", array(LYCHEE_TABLE_TAGS, $tag));
+		} else {
+			$tag_id_q = Database::prepare(Database::get(), "SELECT tag_id FROM ? WHERE tag = '?' AND namespace = '?'", array(LYCHEE_TABLE_TAGS, $tag, $namespace));
+		}
+		$tag_id_r = Database::execute(Database::get(), $tag_id_q, __METHOD__, __LINE__);
+
+		//If the row doesn't exist, create a new entry and try again
+		if ($tag_id_r === false){
+			return false; //Something failed
+		} else {
+			if ($tago = $tag_id_r->fetch_object()){
+				return $tago->tag_id;
+			} else {
+				if ($this->createTagID($tag, $namespace)){
+					return $this->getTagID($tag, $namespace);
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Checks if a given tag ID is already associated with given photo ID. If yes, return true. If not, add it and return true.
+	 * @return boolean Returns true on success
+	 */
+	private function tagPhoto($photoID, $tagID){
+		$tag_check_q = Database::prepare(Database::get(), "SELECT count(tag_id) as c FROM ? WHERE `tag_id` = '?' AND `photo_id` = '?' LIMIT 1", array(LYCHEE_TABLE_PHOTOTAGS, $photoID, $tagID));
+		$tag_check_r = Database::execute(Database::get(), $tag_check_q, __METHOD__, __LINE__);
+
+		if ($tag_check_r === false) {			
+			return false; //Should not happen.
+		} else {
+			if ($res = $tag_check_r->fetch_object()){				
+				if ($res->c > 0){ return true; } //Tag already exists;				
+				$tag_assoc_q = Database::prepare(Database::get(), "INSERT INTO ? (`tag_id`, `photo_id`) VALUES ('?','?')", array(LYCHEE_TABLE_PHOTOTAGS, $tagID, $photoID));
+				$tag_assoc_r = Database::execute(Database::get(), $tag_assoc_q, __METHOD__, __LINE__);
+				return ($tag_assoc_r !== false);
+			}
+			return false;
+		}
+	}
+	/**
+	 * Retrieves CSV of tags/namespaces for the provided Photo ID
+	 * return string
+	 */
+	private function getPhotoTags($photoID){
+		$tags = array();
+		$tag_retr_q = Database::Prepare(Database::get(), "SELECT t.tag, t.namespace FROM " . LYCHEE_TABLE_PHOTOTAGS . " AS pt INNER JOIN " . LYCHEE_TABLE_TAGS . " AS t ON pt.tag_id = t.tag_id WHERE pt.photo_id = '?'", array($photoID));
+		$tag_retr_r = Database::execute(Database::get(), $tag_retr_q, __METHOD__, __LINE__);
+		if ($tag_retr_r === false) {error_log("Dropping out"); return "";}
+		while ($tagrow = $tag_retr_r->fetch_assoc()){
+			if ($tagrow["namespace"]){
+				$tags[] = $tagrow["namespace"].":".$tagrow["tag"];
+			} else {
+				$tags[] = $tagrow["tag"];
+			}
+		}
+		
+		return implode(",", $tags);
+	}
+
 	/**
 	 * Sets the tags of a photo.
 	 * @return boolean Returns true when successful.
 	 */
 	public function setTags($tags) {
-
 		// Excepts the following:
 		// (string) $tags = Comma separated list of tags with a maximum length of 1000 chars
 
@@ -1183,7 +1272,46 @@ final class Photo {
 		$tags = preg_replace('/(\ ,\ )|(\ ,)|(,\ )|(,{1,}\ {0,})|(,$|^,)/', ',', $tags);
 		$tags = preg_replace('/,$|^,|(\ ){0,}$/', '', $tags);
 
-		// Set tags
+		//[TODO] Implement clearTags() to wipe out tags associated with a given photo, or deleteTag($tag)
+
+		//At this point, $tags should be a CSV string
+		$tag_list = explode(",", $tags);
+		$tag_ids = array();
+
+		if (!is_array($tag_list) || empty($tag_list)){ return true; } //No tags, drop out.
+
+		foreach ($tag_list as $tag_string){
+			//Split out "Namespace" from text preceeding the first colon (e.g. "NS:T" -> Namespace="NS", Tag="T")
+			if (strpos($tag_string, ":") !== false){
+				list($namespace, $tag) = explode(":", $tag_string, 2);
+			} else {
+				$namespace = null;
+				$tag = $tag_string;
+			}
+
+			$read_id = $this->getTagID($tag, $namespace);
+			if ($read_id){ $tag_ids[] = $read_id; }
+		}
+		//Remove blank entries and duplicates
+		$unique_ids = array_filter(array_unique($tag_ids));
+		//Associate all returned Tag IDs with all PhotoIDs in $this->photoIDs
+		if (!is_array($unique_ids) || empty($unique_ids)){ return true; } //No tags. Drop out.
+
+
+		//PhotoIDs is also a CSV line
+		$photo_ids = explode(",",$this->photoIDs);
+
+		foreach ($photo_ids as $photoID){
+			error_log("Tagging $photoID");
+			foreach($unique_ids as $u_id){
+				error_log("With $u_id");
+				if (!$this->tagPhoto($photoID, $u_id)){
+					throw new BadFunctionCallException("Failed to tag photo $photoID with tag $u_id");
+				}
+			}
+		}
+
+		// [DEPRECATED] Set tags
 		$query  = Database::prepare(Database::get(), "UPDATE ? SET tags = '?' WHERE id IN (?)", array(LYCHEE_TABLE_PHOTOS, $tags, $this->photoIDs));
 		$result = Database::execute(Database::get(), $query, __METHOD__, __LINE__);
 

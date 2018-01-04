@@ -579,7 +579,7 @@ photo.setTags = function(photoIDs, tags) {
 	}
 
 	photoIDs.forEach(function(id, index, array) {
-		album.json.content[id].tags = tags
+		album.json.content[id].tags += "," + tags
 	})
 
 	let params = {
